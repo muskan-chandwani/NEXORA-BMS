@@ -9,7 +9,6 @@ from nicegui import app, ui
 
 DB = Path(__file__).with_name("nexora.db")
 
-
 def connect():
     con = sqlite3.connect(DB, timeout=15)
     con.row_factory = sqlite3.Row
@@ -18,10 +17,8 @@ def connect():
 
 def initialize_auth_database():
     with connect() as con:
-        # Drop old table to clear out any conflicting constraints completely
-        con.execute("DROP TABLE IF EXISTS users")
         con.execute("""
-            CREATE TABLE users (
+            CREATE TABLE IF NOT EXISTS users (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT,
                 full_name TEXT,
@@ -34,6 +31,16 @@ def initialize_auth_database():
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
+        # Safe column migration check
+        columns = {row["name"] for row in con.execute("PRAGMA table_info(users)")}
+        if "status" not in columns:
+            con.execute("ALTER TABLE users ADD COLUMN status TEXT DEFAULT 'Active'")
+        if "role" not in columns:
+            con.execute("ALTER TABLE users ADD COLUMN role TEXT DEFAULT 'User'")
+        if "full_name" not in columns:
+            con.execute("ALTER TABLE users ADD COLUMN full_name TEXT")
+        if "name" not in columns:
+            con.execute("ALTER TABLE users ADD COLUMN name TEXT")
 
 
 def hash_password(password, salt):
@@ -52,10 +59,10 @@ def register_user(name, email, phone, password):
     password = password or ""
 
     if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email):
-        return False, "कृपया एक वैध ईमेल दर्ज करें।"
+        return False, "Please enter a valid email address."
 
     if len(password) < 8:
-        return False, "पासवर्ड कम से कम 8 अक्षरों का होना चाहिए।"
+        return False, "Password must be at least 8 characters long."
 
     salt = secrets.token_hex(16)
     password_hash = hash_password(password, salt)
@@ -67,13 +74,13 @@ def register_user(name, email, phone, password):
                 (name, full_name, email, phone, role, status, password_hash, password_salt)
                 VALUES (?, ?, ?, ?, 'User', 'Active', ?, ?)
             """, (name, name, email, phone, password_hash, salt))
-        return True, "पंजीकरण सफल रहा।"
+        return True, "Registration successful! Please log in."
 
     except sqlite3.IntegrityError:
-        return False, "यह ईमेल पहले से रजिस्टर्ड है।"
+        return False, "This email is already registered."
 
     except sqlite3.Error as e:
-        return False, f"डेटाबेस एरर: {e}"
+        return False, f"Database error: {e}"
 
 
 def authenticate_user(email, password):
@@ -174,7 +181,7 @@ def login_page():
 
                 if not user:
                     ui.notify(
-                        "गलत ईमेल या पासवर्ड।",
+                        "Incorrect email or password.",
                         type="negative"
                     )
                     return
@@ -185,7 +192,7 @@ def login_page():
                 app.storage.user["user_role"] = user["role"]
                 app.storage.user["user_status"] = user["status"]
 
-                ui.notify("लॉगिन सफल!", type="positive")
+                ui.notify("Login successful!", type="positive")
                 ui.navigate.to("/")
 
             ui.button("LOGIN", on_click=do_login).props(
@@ -229,7 +236,7 @@ def register_page():
                 "outlined"
             ).classes("w-full")
             password = ui.input(
-                "Password (कम से कम 8 अक्षर)",
+                "Password (minimum 8 characters)",
                 password=True,
                 password_toggle_button=True
             ).props("outlined").classes("w-full")
@@ -241,7 +248,7 @@ def register_page():
 
             def do_register():
                 if (password.value or "") != (confirm.value or ""):
-                    ui.notify("पासवर्ड मेल नहीं खा रहे हैं।", type="warning")
+                    ui.notify("Passwords do not match.", type="warning")
                     return
 
                 success, message = register_user(
