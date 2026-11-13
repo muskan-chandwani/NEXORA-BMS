@@ -21,3 +21,10 @@ NEXORA is a business management web application built using Python and the **Nic
 
 Start application:-
 python app.py
+
+# NEXORA - Business Management System
+
+A robust and scalable business management application built with Python and NiceGUI, designed for streamlined workflow management.
+
+## 🚀 Live Demo
+* *Live Application:* [Access NEXORA Web App] https://nexora-bms.onrender.com
