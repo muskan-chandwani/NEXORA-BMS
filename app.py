@@ -585,7 +585,7 @@ def home_page():
 if __name__ in {"__main__", "__mp_main__"}:
     ui.run(
         host="0.0.0.0",
-        port=8081,
+        port=int(os.environ.get("PORT", 8081)),
         title="NEXORA Business Management",
         storage_secret="NEXORA-CHANGE-THIS-TO-A-LONG-RANDOM-SECRET-2026",
         reload=False
