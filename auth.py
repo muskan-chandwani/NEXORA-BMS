@@ -1,46 +1,24 @@
-import sqlite3
+import os
 import re
 import hashlib
 import secrets
 import hmac
-from pathlib import Path
-
+from pymongo import MongoClient
 from nicegui import app, ui
 
-DB = Path(__file__).with_name("nexora.db")
+# MongoDB Atlas connection (uses Environment Variable on Render; paste your URI below for local testing)
+MONGO_URI = os.environ.get("MONGO_URI", "PASTE_YOUR_MONGODB_CONNECTION_STRING_HERE")
 
-def connect():
-    con = sqlite3.connect(DB, timeout=15)
-    con.row_factory = sqlite3.Row
-    return con
+client = MongoClient(MONGO_URI)
+db = client["nexora_db"]
+users_collection = db["users"]
 
-
-def initialize_auth_database():
-    with connect() as con:
-        con.execute("""
-            CREATE TABLE IF NOT EXISTS users (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT,
-                full_name TEXT,
-                email TEXT NOT NULL COLLATE NOCASE UNIQUE,
-                phone TEXT,
-                role TEXT DEFAULT 'User',
-                status TEXT DEFAULT 'Active',
-                password_hash TEXT DEFAULT '',
-                password_salt TEXT DEFAULT '',
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
-        # Safe column migration check
-        columns = {row["name"] for row in con.execute("PRAGMA table_info(users)")}
-        if "status" not in columns:
-            con.execute("ALTER TABLE users ADD COLUMN status TEXT DEFAULT 'Active'")
-        if "role" not in columns:
-            con.execute("ALTER TABLE users ADD COLUMN role TEXT DEFAULT 'User'")
-        if "full_name" not in columns:
-            con.execute("ALTER TABLE users ADD COLUMN full_name TEXT")
-        if "name" not in columns:
-            con.execute("ALTER TABLE users ADD COLUMN name TEXT")
+# Ensure unique indexes on username and email
+try:
+    users_collection.create_index("username", unique=True)
+    users_collection.create_index("email", unique=True)
+except Exception as e:
+    print("Index notice:", e)
 
 
 def hash_password(password, salt):
@@ -52,11 +30,15 @@ def hash_password(password, salt):
     ).hex()
 
 
-def register_user(name, email, phone, password):
+def register_user(username, name, email, phone, password):
+    username = (username or "").strip()
     name = (name or "").strip() or "User"
     email = (email or "").strip().lower()
     phone = (phone or "").strip()
     password = password or ""
+
+    if not username:
+        return False, "Please enter a username."
 
     if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email):
         return False, "Please enter a valid email address."
@@ -64,54 +46,65 @@ def register_user(name, email, phone, password):
     if len(password) < 8:
         return False, "Password must be at least 8 characters long."
 
+    # Check if username or email already exists
+    existing_user = users_collection.find_one({"$or": [{"username": username}, {"email": email}]})
+    if existing_user:
+        if existing_user.get("username") == username:
+            return False, "This username is already taken."
+        return False, "This email is already registered."
+
     salt = secrets.token_hex(16)
     password_hash = hash_password(password, salt)
 
     try:
-        with connect() as con:
-            con.execute("""
-                INSERT INTO users
-                (name, full_name, email, phone, role, status, password_hash, password_salt)
-                VALUES (?, ?, ?, ?, 'User', 'Active', ?, ?)
-            """, (name, name, email, phone, password_hash, salt))
+        users_collection.insert_one({
+            "username": username,
+            "name": name,
+            "full_name": name,
+            "email": email,
+            "phone": phone,
+            "role": "User",
+            "status": "Active",
+            "password_hash": password_hash,
+            "password_salt": salt
+        })
         return True, "Registration successful! Please log in."
 
-    except sqlite3.IntegrityError:
-        return False, "This email is already registered."
-
-    except sqlite3.Error as e:
+    except Exception as e:
         return False, f"Database error: {e}"
 
 
-def authenticate_user(email, password):
-    email = (email or "").strip().lower()
+def authenticate_user(identifier, password):
+    identifier = (identifier or "").strip().lower()
 
     try:
-        with connect() as con:
-            user = con.execute("""
-                SELECT id, name, full_name, email, role, status, password_hash, password_salt
-                FROM users
-                WHERE email = ? COLLATE NOCASE
-            """, (email,)).fetchone()
+        # Case-insensitive search by username or email
+        user = users_collection.find_one({
+            "$or": [
+                {"email": {"$regex": f"^{re.escape(identifier)}$", "$options": "i"}},
+                {"username": {"$regex": f"^{re.escape(identifier)}$", "$options": "i"}}
+            ]
+        })
 
         if not user:
             return None
 
-        entered_hash = hash_password(password or "", user["password_salt"] or "")
+        entered_hash = hash_password(password or "", user.get("password_salt", ""))
 
-        if not hmac.compare_digest(entered_hash, user["password_hash"] or ""):
+        if not hmac.compare_digest(entered_hash, user.get("password_hash", "")):
             return None
 
-        display_name = user["full_name"] or user["name"] or "User"
+        display_name = user.get("full_name") or user.get("name") or "User"
         return {
-            "id": user["id"],
+            "id": str(user["_id"]),
+            "username": user.get("username", ""),
             "name": display_name,
-            "email": user["email"],
-            "role": user["role"] if "role" in user.keys() else "User",
-            "status": user["status"] if "status" in user.keys() else "Active",
+            "email": user.get("email", ""),
+            "role": user.get("role", "User"),
+            "status": user.get("status", "Active"),
         }
 
-    except sqlite3.Error:
+    except Exception:
         return None
 
 
@@ -129,6 +122,7 @@ def require_login():
 def current_user():
     return {
         "id": app.storage.user.get("user_id"),
+        "username": app.storage.user.get("user_username", ""),
         "name": app.storage.user.get("user_name", ""),
         "email": app.storage.user.get("user_email", ""),
         "role": app.storage.user.get("user_role", "User"),
@@ -166,8 +160,9 @@ def login_page():
                 "font-size:25px;font-weight:bold;color:white"
             )
 
-            email = ui.input("Email Address").props(
-                "outlined type=email"
+            # Users can enter either their email or username
+            identifier = ui.input("Email or Username").props(
+                "outlined"
             ).classes("w-full")
 
             password = ui.input(
@@ -177,16 +172,17 @@ def login_page():
             ).props("outlined").classes("w-full")
 
             def do_login():
-                user = authenticate_user(email.value, password.value)
+                user = authenticate_user(identifier.value, password.value)
 
                 if not user:
                     ui.notify(
-                        "Incorrect email or password.",
+                        "Incorrect email/username or password.",
                         type="negative"
                     )
                     return
 
                 app.storage.user["user_id"] = user["id"]
+                app.storage.user["user_username"] = user["username"]
                 app.storage.user["user_name"] = user["name"]
                 app.storage.user["user_email"] = user["email"]
                 app.storage.user["user_role"] = user["role"]
@@ -228,6 +224,7 @@ def register_page():
             )
             ui.separator()
 
+            username = ui.input("Username").props("outlined").classes("w-full")
             name = ui.input("Full Name").props("outlined").classes("w-full")
             email = ui.input("Email Address").props(
                 "outlined type=email"
@@ -252,6 +249,7 @@ def register_page():
                     return
 
                 success, message = register_user(
+                    username.value,
                     name.value,
                     email.value,
                     phone.value,
@@ -274,6 +272,3 @@ def register_page():
                 "Back to Login",
                 on_click=lambda: ui.navigate.to("/login")
             ).props("flat color=primary").classes("w-full mt-2")
-
-
-initialize_auth_database()
