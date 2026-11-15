@@ -27,4 +27,4 @@ python app.py
 A robust and scalable business management application built with Python and NiceGUI, designed for streamlined workflow management.
 
 ## 🚀 Live Demo
-* *Live Application:* [Access NEXORA Web App] https://nexora-bms.onrender.com
+* *Live Application:* [Access NEXORA Web App] https://nexora-bms-2.onrender.com
