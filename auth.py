@@ -3,22 +3,41 @@ import re
 import hashlib
 import secrets
 import hmac
-from pymongo import MongoClient
+import sqlite3
+from pathlib import Path
 from nicegui import app, ui
 
-# MongoDB Atlas connection (uses Environment Variable on Render; paste your URI below for local testing)
-MONGO_URI = os.environ.get("MONGO_URI", "PASTE_YOUR_MONGODB_CONNECTION_STRING_HERE")
+# SQLite database path
+DB_PATH = Path(__file__).with_name("nexora.db")
 
-client = MongoClient(MONGO_URI)
-db = client["nexora_db"]
-users_collection = db["users"]
+def get_db():
+    con = sqlite3.connect(DB_PATH)
+    con.row_factory = sqlite3.Row
+    return con
 
-# Ensure unique indexes on username and email
-try:
-    users_collection.create_index("username", unique=True)
-    users_collection.create_index("email", unique=True)
-except Exception as e:
-    print("Index notice:", e)
+# Ensure users table exists with all required columns
+def init_db():
+    try:
+        with get_db() as con:
+            con.execute("""
+                CREATE TABLE IF NOT EXISTS users (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    username TEXT UNIQUE,
+                    name TEXT,
+                    full_name TEXT,
+                    email TEXT UNIQUE,
+                    phone TEXT,
+                    role TEXT,
+                    status TEXT,
+                    password_hash TEXT,
+                    password_salt TEXT
+                )
+            """)
+            con.commit()
+    except Exception as e:
+        print("Database initialization error:", e)
+
+init_db()
 
 
 def hash_password(password, salt):
@@ -46,30 +65,25 @@ def register_user(username, name, email, phone, password):
     if len(password) < 8:
         return False, "Password must be at least 8 characters long."
 
-    # Check if username or email already exists
-    existing_user = users_collection.find_one({"$or": [{"username": username}, {"email": email}]})
-    if existing_user:
-        if existing_user.get("username") == username:
-            return False, "This username is already taken."
-        return False, "This email is already registered."
-
     salt = secrets.token_hex(16)
     password_hash = hash_password(password, salt)
 
     try:
-        users_collection.insert_one({
-            "username": username,
-            "name": name,
-            "full_name": name,
-            "email": email,
-            "phone": phone,
-            "role": "User",
-            "status": "Active",
-            "password_hash": password_hash,
-            "password_salt": salt
-        })
+        with get_db() as con:
+            con.execute("""
+                INSERT INTO users (username, name, full_name, email, phone, role, status, password_hash, password_salt)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (username, name, name, email, phone, "User", "Active", password_hash, salt))
+            con.commit()
         return True, "Registration successful! Please log in."
-
+    
+    except sqlite3.IntegrityError as e:
+        err_msg = str(e).lower()
+        if "username" in err_msg:
+            return False, "This username is already taken."
+        elif "email" in err_msg:
+            return False, "This email is already registered."
+        return False, "Username or email already exists."
     except Exception as e:
         return False, f"Database error: {e}"
 
@@ -78,33 +92,35 @@ def authenticate_user(identifier, password):
     identifier = (identifier or "").strip().lower()
 
     try:
-        # Case-insensitive search by username or email
-        user = users_collection.find_one({
-            "$or": [
-                {"email": {"$regex": f"^{re.escape(identifier)}$", "$options": "i"}},
-                {"username": {"$regex": f"^{re.escape(identifier)}$", "$options": "i"}}
-            ]
-        })
+        with get_db() as con:
+            cursor = con.cursor()
+            # Check by email or username (case-insensitive lookup)
+            cursor.execute("""
+                SELECT * FROM users 
+                WHERE LOWER(email) = ? OR LOWER(username) = ?
+            """, (identifier, identifier))
+            user = cursor.fetchone()
 
         if not user:
             return None
 
-        entered_hash = hash_password(password or "", user.get("password_salt", ""))
+        entered_hash = hash_password(password or "", user["password_salt"] or "")
 
-        if not hmac.compare_digest(entered_hash, user.get("password_hash", "")):
+        if not hmac.compare_digest(entered_hash, user["password_hash"] or ""):
             return None
 
-        display_name = user.get("full_name") or user.get("name") or "User"
+        display_name = user["full_name"] or user["name"] or "User"
         return {
-            "id": str(user["_id"]),
-            "username": user.get("username", ""),
+            "id": str(user["id"]),
+            "username": user["username"] or "",
             "name": display_name,
-            "email": user.get("email", ""),
-            "role": user.get("role", "User"),
-            "status": user.get("status", "Active"),
+            "email": user["email"] or "",
+            "role": user["role"] or "User",
+            "status": user["status"] or "Active",
         }
 
-    except Exception:
+    except Exception as e:
+        print("Auth error:", e)
         return None
 
 
@@ -160,7 +176,6 @@ def login_page():
                 "font-size:25px;font-weight:bold;color:white"
             )
 
-            # Users can enter either their email or username
             identifier = ui.input("Email or Username").props(
                 "outlined"
             ).classes("w-full")
