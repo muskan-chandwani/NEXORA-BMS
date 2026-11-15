@@ -1,5 +1,2 @@
 nicegui
 requests
-pymongo
-gunicorn
-dnspython
