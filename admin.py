@@ -27,6 +27,12 @@ def setup_admin_and_invoice_databases():
                 created_at TEXT DEFAULT (datetime('now', 'localtime'))
             )
         """)
+        # Safe migration if created_at column is missing in older db
+        try:
+            con.execute("ALTER TABLE users ADD COLUMN created_at TEXT DEFAULT (datetime('now', 'localtime'))")
+        except Exception:
+            pass
+
         # Admin logs table
         con.execute("""
             CREATE TABLE IF NOT EXISTS admin_logs (
@@ -154,7 +160,9 @@ def render_admin_panel():
                             ui.label(u["full_name"]).style("font-weight:bold; color:white;")
                             ui.badge(u["role"], color="blue" if u["role"] == "Admin" else "grey")
                             ui.badge(u["status"], color="green" if u["status"]=="Active" else "red")
-                        ui.label(f"✉️ {u['email']} | Joined: {u['created_at']}").style("font-size:12px; color:#94a3b8;")
+                        
+                        created = u["created_at"] if "created_at" in u.keys() else "N/A"
+                        ui.label(f"✉️ {u['email']} | Joined: {created}").style("font-size:12px; color:#94a3b8;")
 
                     def delete_user(user_id=uid, mail=u["email"]):
                         if mail == "admin@nexora.in":
