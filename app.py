@@ -25,7 +25,19 @@ def connect():
     con = sqlite3.connect(DB, timeout=15)
     con.row_factory = sqlite3.Row
     return con
-
+def setup_database():
+    with connect() as con:
+        con.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT,
+                fullname TEXT,
+                email TEXT,
+                mobile TEXT,
+                password TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
 
 def setup_database():
     with connect() as con:
