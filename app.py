@@ -155,13 +155,13 @@ def home_page():
             "w-full items-center justify-between"
         ):
             with ui.column().classes("gap-0"):
-                ui.label("◆ NEXORA").style(
-                    "font-size:27px;font-weight:900;"
-                    "letter-spacing:3px;color:white"
-                )
-                ui.label("BUSINESS MANAGEMENT SYSTEM").style(
-                    "font-size:10px;letter-spacing:2px;color:#91a8d0"
-                )
+               with ui.column().classes("gap-0 items-start"):
+    ui.label("NEXORA").style(
+        "font-size: 30px !important; line-height: 1.1 !important; font-weight: 800 !important; color: #0b1f3a !important;"
+    )
+    ui.label("BUSINESS MANAGEMENT SYSTEM").style(
+        "font-size: 11px !important; line-height: 1.2 !important; font-weight: 700 !important; letter-spacing: 1.5px !important; color: #0b1f3a !important;"
+    )
 
             with ui.row().classes("items-center"):
                 ui.label(user["name"]).style("color:#c5d5ef")
