@@ -8,7 +8,7 @@ from nicegui import ui
 import auth
 import dashboard
 import task
-import expense 
+import expense
 import admin
 import calling
 import profile_settings
@@ -25,6 +25,8 @@ def connect():
     con = sqlite3.connect(DB, timeout=15)
     con.row_factory = sqlite3.Row
     return con
+
+
 def setup_database():
     with connect() as con:
         con.execute("""
@@ -39,8 +41,6 @@ def setup_database():
             )
         """)
 
-def setup_database():
-    with connect() as con:
         con.execute("""
             CREATE TABLE IF NOT EXISTS customers (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -117,8 +117,6 @@ def valid_customer(name, phone, email):
         return "Please enter a valid email address."
 
     return None
-
-
 # --------------------------------------------------
 # MAIN APPLICATION
 # --------------------------------------------------
@@ -134,36 +132,34 @@ def home_page():
     ui.add_head_html("""
     <style>
         body {
-            background: #f4f6f9;
-            color: #111827;
+            background: #0f172a;
+            color: #f8fafc;
             font-family: Arial, sans-serif;
         }
         .n-card {
-            background: #ffffff !important;
-            color: #111827 !important;
-            border: 1px solid #d1d5db;
+            background: #1e293b !important;
+            color: #f8fafc !important;
+            border: 1px solid #334155;
             border-radius: 15px;
         }
     </style>
     """)
-    with ui.column().classes("w-full p-3 md:p-6").style(
-        "background:#f4f6f9;min-height:100vh"
+
+    with ui.column().classes("w-full p-3 md:p-6 gap-2").style(
+        "background:#0f172a;min-height:100vh"
     ):
 
         # HEADER
-        with ui.row().classes(
-            "w-full items-center justify-between"
-        ):
-            with ui.column().classes("gap-0"):
-               with ui.column().classes("gap-0 items-start"):
-    ui.label("NEXORA").style(
-        "font-size: 30px !important; line-height: 1.1 !important; font-weight: 800 !important; color: #0b1f3a !important;"
-    )
-    ui.label("BUSINESS MANAGEMENT SYSTEM").style(
-        "font-size: 11px !important; line-height: 1.2 !important; font-weight: 700 !important; letter-spacing: 1.5px !important; color: #0b1f3a !important;"
-    )
+        with ui.row().classes("w-full items-center justify-between"):
+            with ui.column().classes("gap-0 items-start"):
+                ui.label("NEXORA").style(
+                    "font-size: 30px !important; line-height: 1.1 !important; font-weight: 800 !important; color: #ffffff !important;"
+                )
+                ui.label("BUSINESS MANAGEMENT SYSTEM").style(
+                    "font-size: 11px !important; line-height: 1.2 !important; font-weight: 700 !important; letter-spacing: 1.5px !important; color: #94a3b8 !important;"
+                )
 
-            with ui.row().classes("items-center"):
+            with ui.row().classes("items-center gap-2"):
                 ui.label(user["name"]).style("color:#c5d5ef")
                 ui.button(
                     "Dashboard",
@@ -174,7 +170,7 @@ def home_page():
                     on_click=auth.logout
                 ).props("outline color=negative")
 
-        ui.separator().classes("my-3")
+        ui.separator().classes("my-2")
 
         tabs = ui.tabs().classes("w-full").props(
             "dark active-color=primary indicator-color=primary"
@@ -184,13 +180,12 @@ def home_page():
             customers_tab = ui.tab("Customers", icon="groups")
             orders_tab = ui.tab("Orders", icon="receipt_long")
             tasks_tab = ui.tab("Tasks", icon="task_alt")
-            expense_tab = ui.tab("expenses",icon="payments")
+            expense_tab = ui.tab("expenses", icon="payments")
             admin_tab = ui.tab("Admin Panel", icon="admin_panel_settings")
             calling_tab = ui.tab("Calling Hub", icon="phone_in_talk")
             profile_tab = ui.tab("profile & settings", icon="manage_accounts")
 
-           
-        with ui.tab_panels(tabs, value=overview_tab).classes("w-full").props(
+        with ui.tab_panels(tabs, value=overview_tab).classes("w-full bg-transparent").props(
             "animated"
         ):
             # ------------------------------------------
@@ -265,10 +260,10 @@ def home_page():
                         "font-size:19px;font-weight:bold;color:white"
                     )
 
-                    c_name = ui.input("Customer Name").props("outlined").classes("w-full")
-                    c_phone = ui.input("Mobile Number").props("outlined").classes("w-full")
-                    c_email = ui.input("Email Address").props("outlined type=email").classes("w-full")
-                    c_address = ui.textarea("Full Address").props("outlined").classes("w-full")
+                    c_name = ui.input("Customer Name").props("outlined dark").classes("w-full")
+                    c_phone = ui.input("Mobile Number").props("outlined dark").classes("w-full")
+                    c_email = ui.input("Email Address").props("outlined dark type=email").classes("w-full")
+                    c_address = ui.textarea("Full Address").props("outlined dark").classes("w-full")
                     customer_message = ui.label("").style("color:#ff8795")
 
                     ui.button(
@@ -277,7 +272,7 @@ def home_page():
                         on_click=lambda: add_customer()
                     ).props("color=primary").classes("mt-2")
 
-                customer_search = ui.input("Search by Name or Mobile").props("outlined clearable").classes("w-full")
+                customer_search = ui.input("Search by Name or Mobile").props("outlined dark clearable").classes("w-full")
                 customer_count_label = ui.label("").style("color:#9eafca")
                 customer_list = ui.column().classes("w-full gap-3 mt-2")
 
@@ -317,8 +312,15 @@ def home_page():
                         return
                     try:
                         with connect() as con:
-                            con.execute("INSERT INTO customers (name, phone, email, address) VALUES (?, ?, ?, ?)",
-                                        (c_name.value.strip(), c_phone.value.strip(), c_email.value.strip(), c_address.value.strip()))
+                            con.execute(
+                                "INSERT INTO customers (name, phone, email, address) VALUES (?, ?, ?, ?)",
+                                (
+                                    c_name.value.strip(),
+                                    (c_phone.value or "").strip(),
+                                    (c_email.value or "").strip(),
+                                    (c_address.value or "").strip(),
+                                )
+                            )
                         c_name.value, c_phone.value, c_email.value, c_address.value, customer_message.text = "", "", "", "", ""
                         ui.notify("Customer added successfully!", type="positive")
                         refresh_customers()
@@ -335,7 +337,8 @@ def home_page():
 
                 customer_search.on_value_change(refresh_customers)
                 refresh_customers()
-            # ------------------------------------------
+
+                # ------------------------------------------
             # ORDERS TAB
             # ------------------------------------------
 
@@ -348,23 +351,23 @@ def home_page():
 
                     with connect() as con:
                         cust_rows = con.execute("SELECT id, name, phone FROM customers ORDER BY name").fetchall()
-                    
+
                     cust_options = {c["id"]: f"{c['name']} ({c['phone'] or 'No Phone'})" for c in cust_rows}
 
                     o_customer_select = ui.select(
                         options=cust_options,
                         label="Select Customer"
-                    ).props("outlined").classes("w-full")
+                    ).props("outlined dark").classes("w-full")
 
-                    o_service = ui.input("Service / Product Name").props("outlined").classes("w-full")
-                    
+                    o_service = ui.input("Service / Product Name").props("outlined dark").classes("w-full")
+
                     with ui.row().classes("w-full gap-3"):
-                        o_amount = ui.input("Total Amount (₹)", value="0").props("outlined type=number").classes("flex-1")
-                        o_advance = ui.input("Advance Paid (₹)", value="0").props("outlined type=number").classes("flex-1")
+                        o_amount = ui.input("Total Amount (₹)", value="0").props("outlined dark type=number").classes("flex-1")
+                        o_advance = ui.input("Advance Paid (₹)", value="0").props("outlined dark type=number").classes("flex-1")
 
                     with ui.row().classes("w-full gap-3 mt-2"):
-                        o_due_date = ui.input("Due Date (YYYY-MM-DD)", value=datetime.now().strftime("%Y-%m-%d")).props("outlined").classes("flex-1")
-                        o_status = ui.select(["Pending", "In Progress", "Completed"], value="Pending", label="Status").props("outlined").classes("flex-1")
+                        o_due_date = ui.input("Due Date (YYYY-MM-DD)", value=datetime.now().strftime("%Y-%m-%d")).props("outlined dark").classes("flex-1")
+                        o_status = ui.select(["Pending", "In Progress", "Completed"], value="Pending", label="Status").props("outlined dark").classes("flex-1")
 
                     order_message = ui.label("").style("color:#ff8795")
 
@@ -374,7 +377,7 @@ def home_page():
                         on_click=lambda: add_order()
                     ).props("color=primary").classes("mt-3")
 
-                order_search = ui.input("Search Orders by Customer Name or Service").props("outlined clearable").classes("w-full")
+                order_search = ui.input("Search Orders by Customer Name or Service").props("outlined dark clearable").classes("w-full")
                 order_count_label = ui.label("").style("color:#9eafca")
                 order_list = ui.column().classes("w-full gap-3 mt-2")
 
@@ -392,7 +395,7 @@ def home_page():
                             """, (pattern, pattern, pattern)).fetchall()
                         else:
                             rows = con.execute("SELECT * FROM orders ORDER BY id DESC").fetchall()
-                        
+
                         total_orders = con.execute("SELECT COUNT(*) FROM orders").fetchone()[0]
 
                     order_count_label.text = f"Showing {len(rows)} of {total_orders} orders"
@@ -422,7 +425,7 @@ def home_page():
                     if not o_customer_select.value:
                         order_message.text = "Please select a customer."
                         return
-                    
+
                     service_name = (o_service.value or "").strip()
                     if not service_name:
                         order_message.text = "Service name is required."
@@ -449,7 +452,7 @@ def home_page():
                     o_amount.value = "0"
                     o_advance.value = "0"
                     order_message.text = ""
-                    
+
                     ui.notify("Order created successfully!", type="positive")
                     refresh_orders()
                     refresh_overview()
@@ -464,131 +467,26 @@ def home_page():
                 order_search.on_value_change(refresh_orders)
                 refresh_orders()
 
-               
-
-                # ------------------------------------------
-            # EXPENSE & FINANCIAL MANAGER TAB
+            # ------------------------------------------
+            # EXPENSE, ADMIN, CALLING & PROFILE TABS
             # ------------------------------------------
             with ui.tab_panel(expense_tab):
                 expense.render_expense_tracker()
 
             with ui.tab_panel(admin_tab):
-              admin.render_admin_panel()
+                admin.render_admin_panel()
 
             with ui.tab_panel(calling_tab):
-              calling.render_calling_module() 
+                calling.render_calling_module()
 
             with ui.tab_panel(profile_tab):
-               profile_settings.render_profile_settings()
-
-               
+                profile_settings.render_profile_settings()
 
             # ------------------------------------------
             # SMART TASK MANAGER TAB
             # ------------------------------------------
-
             with ui.tab_panel(tasks_tab):
                 task.render_task_manager()
-                ui.label("Smart Task Manager").style("font-size:24px;font-weight:800;color:white")
-                ui.label("Organize, track, and manage your daily business tasks.").style("color:#9eafca")
-
-                with ui.card().classes("n-card w-full p-4 mb-4"):
-                    ui.label("Add New Task").style("font-size:19px;font-weight:bold;color:white")
-                    
-                    t_title = ui.input("Task Title").props("outlined").classes("w-full")
-                    t_desc = ui.textarea("Description / Notes").props("outlined").classes("w-full")
-                    
-                    with ui.row().classes("w-full gap-3"):
-                        t_date = ui.input("Due Date (YYYY-MM-DD)", value=datetime.now().strftime("%Y-%m-%d")).props("outlined").classes("flex-1")
-                        t_priority = ui.select(["High", "Medium", "Low"], value="Medium", label="Priority").props("outlined").classes("flex-1")
-
-                    task_message = ui.label("").style("color:#ff8795")
-
-                    ui.button(
-                        "Save Task",
-                        icon="add_task",
-                        on_click=lambda: add_task()
-                    ).props("color=primary").classes("mt-2")
-
-                task_list = ui.column().classes("w-full gap-3")
-
-                def refresh_tasks():
-                    task_list.clear()
-                    with connect() as con:
-                        rows = con.execute("SELECT * FROM tasks ORDER BY id DESC").fetchall()
-
-                    with task_list:
-                        if not rows:
-                            ui.label("No tasks found. Add a new task above.").style("color:#a9bbd8")
-                        
-                        for task in rows:
-                            tid = task["id"]
-                            status = task["status"]
-                            color_border = "#23c99a" if status == "Completed" else "#3988ff"
-
-                            with ui.card().classes("n-card w-full p-3").style(f"border-left: 5px solid {color_border}"):
-                                with ui.row().classes("w-full items-center justify-between"):
-                                    with ui.column().classes("gap-1"):
-                                        ui.label(task["title"]).style(
-                                            "font-size:17px;font-weight:bold;color:white;" + 
-                                            ("text-decoration: line-through; color: #888;" if status == "Completed" else "")
-                                        )
-                                        if task["description"]:
-                                            ui.label(task["description"]).style("color:#a9bbd8;font-size:13px")
-                                        ui.label(f"Due: {task['due_date']} | Priority: {task['priority']} | Status: {status}").style("color:#e5b84d;font-size:12px")
-
-                                    with ui.row().classes("items-center"):
-                                        if status != "Completed":
-                                            ui.button(icon="check", on_click=lambda tid=tid: mark_task_complete(tid)).props("flat color=positive").tooltip("Mark Completed")
-                                        else:
-                                            ui.button(icon="undo", on_click=lambda tid=tid: mark_task_pending(tid)).props("flat color=warning").tooltip("Mark Pending")
-                                        
-                                        ui.button(icon="delete", on_click=lambda tid=tid: delete_task(tid)).props("flat color=negative").tooltip("Delete")
-
-                def add_task():
-                    title = (t_title.value or "").strip()
-                    if not title:
-                        task_message.text = "Task title is required."
-                        return
-
-                    try:
-                        with connect() as con:
-                            con.execute("""
-                                INSERT INTO tasks (title, description, due_date, priority, status)
-                                VALUES (?, ?, ?, ?, 'Pending')
-                            """, (title, (t_desc.value or "").strip(), t_date.value, t_priority.value))
-
-                        t_title.value = ""
-                        t_desc.value = ""
-                        task_message.text = ""
-                        ui.notify("Task added successfully!", type="positive")
-                        refresh_tasks()
-                        refresh_overview()
-                    except sqlite3.Error as e:
-                        ui.notify(f"Error: {e}", type="negative")
-
-                def mark_task_complete(tid):
-                    with connect() as con:
-                        con.execute("UPDATE tasks SET status = 'Completed' WHERE id = ?", (tid,))
-                    ui.notify("Task marked as completed!", type="positive")
-                    refresh_tasks()
-                    refresh_overview()
-
-                def mark_task_pending(tid):
-                    with connect() as con:
-                        con.execute("UPDATE tasks SET status = 'Pending' WHERE id = ?", (tid,))
-                    ui.notify("Task marked as pending!", type="positive")
-                    refresh_tasks()
-                    refresh_overview()
-
-                def delete_task(tid):
-                    with connect() as con:
-                        con.execute("DELETE FROM tasks WHERE id = ?", (tid,))
-                    ui.notify("Task deleted successfully!", type="positive")
-                    refresh_tasks()
-                    refresh_overview()
-
-    refresh_tasks()
 
 
 # --------------------------------------------------
