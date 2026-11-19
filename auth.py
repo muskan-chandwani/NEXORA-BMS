@@ -7,6 +7,11 @@ import sqlite3
 from pathlib import Path
 from nicegui import app, ui
 
+try:
+    import profile_settings
+except Exception:
+    profile_settings = None
+
 # SQLite database path
 DB_PATH = Path(__file__).with_name("nexora.db")
 
@@ -110,11 +115,18 @@ def authenticate_user(identifier, password):
             return None
 
         display_name = user["full_name"] or user["name"] or "User"
+        phone_val = ""
+        try:
+            phone_val = (user["phone"] or "").strip()
+        except Exception:
+            phone_val = ""
+
         return {
             "id": str(user["id"]),
             "username": user["username"] or "",
             "name": display_name,
             "email": user["email"] or "",
+            "phone": phone_val,
             "role": user["role"] or "User",
             "status": user["status"] or "Active",
         }
@@ -139,29 +151,36 @@ def current_user():
     uid = app.storage.user.get("user_id")
     role = app.storage.user.get("user_role", "User")
     email = app.storage.user.get("user_email", "")
+    phone = app.storage.user.get("user_phone", "")
 
     if uid or email:
         try:
             with get_db() as con:
                 if uid:
-                    row = con.execute("SELECT role, status FROM users WHERE id = ?", (uid,)).fetchone()
+                    row = con.execute("SELECT role, status, phone FROM users WHERE id = ?", (uid,)).fetchone()
                 else:
-                    row = con.execute("SELECT role, status FROM users WHERE LOWER(email) = ?", (email.lower(),)).fetchone()
+                    row = con.execute("SELECT role, status, phone FROM users WHERE LOWER(email) = ?", (email.lower(),)).fetchone()
                 if row:
                     role = row["role"] or role
+                    phone = (row["phone"] or phone or "").strip()
                     app.storage.user["user_role"] = role
+                    app.storage.user["user_phone"] = phone
                     app.storage.user["user_status"] = row["status"] or app.storage.user.get("user_status", "Active")
         except Exception:
             pass
 
-    return {
+    user_data = {
         "id": uid,
         "username": app.storage.user.get("user_username", ""),
         "name": app.storage.user.get("user_name", ""),
         "email": email,
+        "phone": phone,
         "role": role,
         "status": app.storage.user.get("user_status", "Active"),
     }
+    if profile_settings is not None and uid:
+        profile_settings.set_active_session_user(user_data, app.storage.user)
+    return user_data
 
 
 def logout():
@@ -218,8 +237,11 @@ def login_page():
                 app.storage.user["user_username"] = user["username"]
                 app.storage.user["user_name"] = user["name"]
                 app.storage.user["user_email"] = user["email"]
+                app.storage.user["user_phone"] = user.get("phone", "")
                 app.storage.user["user_role"] = user["role"]
                 app.storage.user["user_status"] = user["status"]
+                if profile_settings is not None:
+                    profile_settings.set_active_session_user(user, app.storage.user)
 
                 ui.notify("Login successful!", type="positive")
                 ui.navigate.to("/")
