@@ -136,12 +136,30 @@ def require_login():
 
 
 def current_user():
+    uid = app.storage.user.get("user_id")
+    role = app.storage.user.get("user_role", "User")
+    email = app.storage.user.get("user_email", "")
+
+    if uid or email:
+        try:
+            with get_db() as con:
+                if uid:
+                    row = con.execute("SELECT role, status FROM users WHERE id = ?", (uid,)).fetchone()
+                else:
+                    row = con.execute("SELECT role, status FROM users WHERE LOWER(email) = ?", (email.lower(),)).fetchone()
+                if row:
+                    role = row["role"] or role
+                    app.storage.user["user_role"] = role
+                    app.storage.user["user_status"] = row["status"] or app.storage.user.get("user_status", "Active")
+        except Exception:
+            pass
+
     return {
-        "id": app.storage.user.get("user_id"),
+        "id": uid,
         "username": app.storage.user.get("user_username", ""),
         "name": app.storage.user.get("user_name", ""),
-        "email": app.storage.user.get("user_email", ""),
-        "role": app.storage.user.get("user_role", "User"),
+        "email": email,
+        "role": role,
         "status": app.storage.user.get("user_status", "Active"),
     }
 
