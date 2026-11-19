@@ -3,15 +3,33 @@ import hashlib
 from pathlib import Path
 from nicegui import ui
 
+try:
+    import auth
+except Exception:
+    auth = None
+
 DB = Path(__file__).with_name("nexora.db")
+
 
 def connect():
     con = sqlite3.connect(DB, timeout=15)
     con.row_factory = sqlite3.Row
     return con
 
+
 def hash_password(password: str) -> str:
     return hashlib.sha256(password.encode()).hexdigest()
+
+
+def get_current_user_info():
+    if auth is None:
+        return {}
+    try:
+        u = auth.current_user()
+        return dict(u) if u else {}
+    except Exception:
+        return {}
+
 
 def setup_admin_and_invoice_databases():
     with connect() as con:
@@ -53,7 +71,7 @@ def setup_admin_and_invoice_databases():
                 date TEXT DEFAULT (datetime('now', 'localtime'))
             )
         """)
-        
+
         # Seed default admin if empty
         existing = con.execute("SELECT COUNT(*) as cnt FROM users").fetchone()["cnt"]
         if existing == 0:
@@ -74,12 +92,17 @@ def setup_admin_and_invoice_databases():
                 ("Acme Corp", "Software Consultation & Setup", 15000.00, "Unpaid")
             )
 
+
 def log_action(action: str, target: str):
     with connect() as con:
         con.execute("INSERT INTO admin_logs (action, target) VALUES (?, ?)", (action, target))
 
+
 def render_admin_panel():
     setup_admin_and_invoice_databases()
+    curr_user = get_current_user_info()
+    curr_role = (curr_user.get("role") or "Admin").strip().lower()
+    curr_email = (curr_user.get("email") or "").strip().lower()
 
     with ui.column().classes("w-full min-h-full gap-6 p-4 text-white"):
         # 1. Admin Header
@@ -148,25 +171,31 @@ def render_admin_panel():
         # 4. Registered Users Directory Table (Admin Feature)
         with ui.card().classes("w-full p-4 bg-slate-900 border border-slate-700"):
             ui.label("👥 Registered Users Directory").style("font-size:16px; font-weight:700; color:white; margin-bottom:8px;")
-            
+
             with connect() as con:
                 users = con.execute("SELECT * FROM users ORDER BY id DESC").fetchall()
 
             for u in users:
                 uid = u["id"]
+                target_role = (u["role"] or "User").strip().lower()
+                target_email = (u["email"] or "").strip().lower()
+
                 with ui.row().classes("w-full justify-between items-center py-2 border-b border-slate-800"):
                     with ui.column().classes("gap-0"):
                         with ui.row().classes("items-center gap-2"):
                             ui.label(u["full_name"]).style("font-weight:bold; color:white;")
                             ui.badge(u["role"], color="blue" if u["role"] == "Admin" else "grey")
-                            ui.badge(u["status"], color="green" if u["status"]=="Active" else "red")
-                        
+                            ui.badge(u["status"], color="green" if u["status"] == "Active" else "red")
+
                         created = u["created_at"] if "created_at" in u.keys() else "N/A"
                         ui.label(f"✉️ {u['email']} | Joined: {created}").style("font-size:12px; color:#94a3b8;")
 
-                    def delete_user(user_id=uid, mail=u["email"]):
-                        if mail == "admin@nexora.in":
-                            ui.notify("Cannot delete root admin account!", color="negative")
+                    def delete_user(user_id=uid, mail=u["email"], t_role=target_role, t_mail=target_email):
+                        if t_role == "admin" and curr_role != "admin":
+                            ui.notify("Only an Admin can delete an Admin account!", color="negative")
+                            return
+                        if curr_email and t_mail == curr_email:
+                            ui.notify("You cannot delete your own active account!", color="negative")
                             return
                         with connect() as con:
                             con.execute("DELETE FROM users WHERE id = ?", (user_id,))
@@ -184,7 +213,7 @@ def render_admin_panel():
         # Create Invoice Form Card
         with ui.card().classes("w-full p-6 bg-slate-900 border border-slate-700"):
             ui.label("➕ Create New Invoice").style("font-size:16px; font-weight:700; color:white; margin-bottom:10px;")
-            
+
             with ui.row().classes("w-full gap-4 items-center"):
                 client_in = ui.input(placeholder="Client Name").props("outlined dark dense").classes("flex-1 text-white")
                 item_in = ui.input(placeholder="Service / Product Description").props("outlined dark dense").classes("flex-1 text-white")
@@ -218,7 +247,7 @@ def render_admin_panel():
         # Invoices Directory List Card
         with ui.card().classes("w-full p-6 bg-slate-900 border border-slate-700"):
             ui.label("📋 Issued Invoices Directory").style("font-size:16px; font-weight:700; color:white; margin-bottom:12px;")
-            
+
             with connect() as con:
                 invoices = con.execute("SELECT * FROM invoices ORDER BY id DESC").fetchall()
 
