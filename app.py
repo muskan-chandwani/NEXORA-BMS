@@ -134,20 +134,20 @@ def home_page():
     ui.add_head_html("""
     <style>
         body {
-            background: #080d1b;
-            color: white;
+            background: #f4f6f9;
+            color: #111827;
             font-family: Arial, sans-serif;
         }
         .n-card {
-            background: #14213b;
-            border: 1px solid #2b4168;
+            background: #ffffff !important;
+            color: #111827 !important;
+            border: 1px solid #d1d5db;
             border-radius: 15px;
         }
     </style>
     """)
-
     with ui.column().classes("w-full p-3 md:p-6").style(
-        "background:#080d1b;min-height:100vh"
+        "background:#f4f6f9;min-height:100vh"
     ):
 
         # HEADER
