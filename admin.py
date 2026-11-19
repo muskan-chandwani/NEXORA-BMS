@@ -1,7 +1,7 @@
 import sqlite3
 import hashlib
 from pathlib import Path
-from nicegui import ui
+from nicegui import app, ui
 
 try:
     import auth
@@ -101,8 +101,8 @@ def log_action(action: str, target: str):
 def render_admin_panel():
     setup_admin_and_invoice_databases()
     curr_user = get_current_user_info()
-    curr_role = (curr_user.get("role") or "Admin").strip().lower()
-    curr_email = (curr_user.get("email") or "").strip().lower()
+    curr_uid = str(curr_user.get("id") or app.storage.user.get("user_id") or "").strip()
+    curr_email = (curr_user.get("email") or app.storage.user.get("user_email") or "").strip().lower()
 
     with ui.column().classes("w-full min-h-full gap-6 p-4 text-white"):
         # 1. Admin Header
@@ -177,7 +177,6 @@ def render_admin_panel():
 
             for u in users:
                 uid = u["id"]
-                target_role = (u["role"] or "User").strip().lower()
                 target_email = (u["email"] or "").strip().lower()
 
                 with ui.row().classes("w-full justify-between items-center py-2 border-b border-slate-800"):
@@ -190,18 +189,25 @@ def render_admin_panel():
                         created = u["created_at"] if "created_at" in u.keys() else "N/A"
                         ui.label(f"✉️ {u['email']} | Joined: {created}").style("font-size:12px; color:#94a3b8;")
 
-                    def delete_user(user_id=uid, mail=u["email"], t_role=target_role, t_mail=target_email):
-                        if t_role == "admin" and curr_role != "admin":
-                            ui.notify("Only an Admin can delete an Admin account!", color="negative")
-                            return
-                        if curr_email and t_mail == curr_email:
-                            ui.notify("You cannot delete your own active account!", color="negative")
-                            return
+                    def delete_user(user_id=uid, mail=u["email"], t_mail=target_email):
+                        is_self = bool(
+                            (curr_uid and str(user_id).strip() == curr_uid)
+                            or (curr_email and t_mail and t_mail == curr_email)
+                        )
                         with connect() as con:
                             con.execute("DELETE FROM users WHERE id = ?", (user_id,))
                         log_action("USER_DELETED", mail)
                         ui.notify("User deleted!", color="negative")
-                        ui.navigate.reload()
+                        if is_self:
+                            app.storage.user.clear()
+                            if auth is not None:
+                                try:
+                                    auth._CURRENT_USER = None
+                                except Exception:
+                                    pass
+                            ui.navigate.to("/login")
+                        else:
+                            ui.navigate.reload()
 
                     ui.button(icon="delete", on_click=delete_user).props("flat color=red dense")
 
