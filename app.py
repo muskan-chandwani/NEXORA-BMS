@@ -149,8 +149,8 @@ def home_page():
         "background:#0f172a;min-height:100vh"
     ):
 
-        # HEADER
-        with ui.row().classes("w-full items-center justify-between"):
+       # HEADER
+        with ui.row().classes("w-full items-center justify-between flex-wrap gap-2"):
             with ui.column().classes("gap-0 items-start"):
                 ui.label("NEXORA").style(
                     "font-size: 30px !important; line-height: 1.1 !important; font-weight: 800 !important; color: #ffffff !important;"
@@ -159,7 +159,7 @@ def home_page():
                     "font-size: 11px !important; line-height: 1.2 !important; font-weight: 700 !important; letter-spacing: 1.5px !important; color: #94a3b8 !important;"
                 )
 
-            with ui.row().classes("items-center gap-2"):
+            with ui.row().classes("items-center gap-2 ml-auto"):
                 ui.label(user["name"]).style("color:#c5d5ef")
                 ui.button(
                     "Dashboard",
